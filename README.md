@@ -1,6 +1,6 @@
-# python_cmake_boilerplate
+# python_cmaketools
 
-## Boilerplate for Python packages with CMake-based binary extensions
+## Setuptools extensions for CMake: Seamless integration of Cmake build system to setuptools
 
 This repository provides a powerful boilerplate (GitHub Template) for Python packages with binary extension modules. Specifically, it includes a set of Python setup modules to create a `sdist` tarball from a [CMake](https://cmake.org/) project with minimal `setup.py` scripting.
 
@@ -12,69 +12,6 @@ This repository provides a powerful boilerplate (GitHub Template) for Python pac
 - **Git Submodule Aware**: If a project contains git submodules, the submodules will be automatically cloned during `pip` installation and the pinned commit of each submodule will be checked out before build.
 - **Support for CMake Command-Line Options**: The most of [the CMake command line options](https://cmake.org/cmake/help/v3.17/manual/cmake.1.html) are made available as options to the `build_ext` command of `setuptools`. For example, `python setup.py build_ext -GNinja` will build the CMake project with Ninja build system.
 - **Integaration of Native Code Tests**: CMake ships with a test driver program, called [ctest](https://cmake.org/cmake/help/latest/manual/ctest.1.html). With it, this boilerplate enables simultaneous testing of both the native and Python codes of the package all in Python.
-
-### About Included Example Project
-
-The included example uses [`pybind11`](http://pybind11.readthedocs.io/en/stable/index.html) to bind C++ code to Python. It is loosely based on @benjaminjack's [`python_cpp_example`](https://github.com/benjaminjack/python_cpp_example), which on itself is derived form [`pybind11's` CMake example](https://github.com/pybind/cmake_example).
-
-#### Installation/Exploration
-
-To explore the boilerplate function, first clone the repo with submodules:
-
-```bash
-git clone https://github.com/hokiedsp/python_cmake_boilerplate.git --recurse-submodules
-```
-
-Then navigate to the project root directory and create the distribution packages. For example,
-
-```bash
-python setup.py sdist bdist_wheel
-```
-
-creates both source and wheel distributions. They will be found in `dist` subdirectory, and to install them, run
-
-```bash
-pip install dist/mypkg-0.5.tar.gz # from source distribution OR
-pip install dist/mypkg-0.5-cp37-cp37m-win_amd64.whl # from wheel distribution (file suffix may vary)
-```
-
-Now, to build purely from CMake, delete both `dist` and `build` subdirectories under the root, then type:
-
-```bash
-cmake . # to configure
-cd build
-cmake --build . # build the binary extensions
-cmake --install . # install the complete Python package in dist directory
-ctest . # runs test on pure c++ code
-```
-
-The resulting package is found in `dist/mypkg`. If you compare the content of this directory vs. after `python setup.py sdist bdist_wheel`, you may notice that the binary extension file is missing from `dist/mypkg`. This is by design of `setuptools`/`distutils`.
-
-Now, to run the test in Python, return to the root directory and type:
-
-```bash
-pip install -e .    # install package using setup.py in editable mode
-pytest tests        # run all the test scripts in tests subdirectory
-pip uninstall mypkg # uninstall the package
-```
-
-Finally,
-
-```bash
-tox
-```
-
-tests the package in controlled environments
-
-#### Files
-
-1. `src/example_module`: Python binding module of simple C++ functions
-2. `src/hello.py`: Python module
-3. `src/subpackage/subsubpackage/bye.py`: demo subpackge resolution
-4. `lib/catch2` & `lib/pybind11`: git submodules
-5. `tests/*.cpp`: Unit tests for C++ code using [`catch2`](https://github.com/catchorg/Catch2.git)
-6. `tests/*.py`: Unit tests for Python code (using `pytest`)
-7. `tox.ini`: `Tox` configuration file
 
 ### Source Directory Structure
 

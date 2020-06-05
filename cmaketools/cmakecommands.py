@@ -11,8 +11,8 @@ from setuptools.command.sdist import sdist as _sdist_orig
 from distutils.command.install_data import install_data as _install_data_orig
 from wheel import bdist_wheel as _bdist_wheel_orig
 
-from cmakebuilder import CMakeBuilder
-import cmakeutil
+from .cmakebuilder import CMakeBuilder
+from . import cmakeutil
 
 
 class manifest_maker(_manifest_maker_orig):
@@ -90,7 +90,7 @@ class _build_py(_build_py_orig):
             self._run_cmake()
 
             # get the package_data from cmake
-            package_data = self.cmake.get_package_data()
+            package_data = self.cmake.find_package_data()
             if package_data:
                 self.distribution.package_data = package_data
                 self.package_data = package_data

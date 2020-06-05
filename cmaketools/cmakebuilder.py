@@ -1,21 +1,99 @@
 import os
 import re
 
-import cmakeutil
-import gitutil
+from . import cmakeutil
+from . import gitutil
 from setuptools import Extension
 from pathlib import Path as _Path, PurePath as _PurePath
 from distutils import sysconfig
 
 
 class CMakeBuilder:
+    """
+    A class used to manage CMake build process
+
+    ...
+
+    Attributes
+    ----------
+    path : str
+        (static) Path to cmake executable. Auto-initialized
+    package_name : str
+        Name of the base package
+    src_dir : str
+        Source directory (default "src")
+    ext_module_dirs : str[]
+        List of source directories defining external modules
+    ext_module_hint : str 
+        Regex pattern to auto-detect external module directories
+    test_dir : str
+        Unit test directory (default "tests")
+    test_submodules : str[]
+        List of git submodules only used for testing
+    has_package_data : bool
+        Set False IF project has no package_data (default True)
+    skip_configure : bool
+        Set True to configure cmake externally (default False)
+    config : str
+        Default CMake build type (default "Release")
+    generator : str
+        Default CMake --G argument
+    platform : str
+        Default CMake --platform argument
+    toolset : str
+        Default CMake --toolset argument
+    parallel : int > 0
+        CMake --parallel argument
+    configure_args : str[]
+        List of other option arguments for CMake configure 
+    build_args : str[]
+        List of other option arguments for CMake build
+    install_args : str[]
+        List of other option arguments for CMake install
+
+    Static Methods
+    --------------
+    get_generators(as_list=False)
+        Get available CMake generators
+    get_generator_names()
+        Get names of available CMake generators
+
+    Methods
+    -------
+    clear()
+        Clear build directory
+
+    Internal Methods to Generate Arguments of setuptools.setup
+    ----------------------------------------------------------
+    get_package_dir()
+        Returns package_dir argument for setuptools.setup()
+    get_setup_data_files()
+        Returns data_files argument for setuptools.setup()
+    get_package_data(prefix=None):
+        Returns package_data argument for setuptools.setup()
+    find_packages()
+        Returns packages argument for setuptools.setup()
+    find_ext_modules()
+        Returns ext_modules argument for setuptools.setup()
+
+    Internal Methods Invoked by setuptools.setup commands
+    -----------------------------------------------------
+    get_source_files()
+        Returns a list of all the files in src_dir
+    pin_gitmodules()
+        Save status of submodules to be included in the sdist
+    save_cmake_config()
+        Save current CMake configurations
+    configure(generator=None, config=None, parallel=None, 
+              configure_args=[], build_args=[], install_args=[]):
+        Configure CMake project
+    run(prefix=None, component=None, pkg_version=None):
+        Run CMake build & install
+    revert()
+        Revert the builder configuration to the initial state
+    """
+
     path = cmakeutil.findexe("cmake")
-    default_setup_data_files = [
-        "cmakecommands.py",
-        "cmakebuilder.py",
-        "cmakeutil.py",
-        "gitutil.py",
-    ]
 
     @staticmethod
     def get_generators(as_list=False):
@@ -32,7 +110,7 @@ class CMakeBuilder:
 
     @staticmethod
     def get_generator_names():
-        """validate generator is among the available CMake generators
+        """get names of available CMake generators
         
         Parameter:
         generator str: Generator name to validate
@@ -41,7 +119,42 @@ class CMakeBuilder:
         return cmakeutil.get_generator_names(CMakeBuilder.path)
 
     def __init__(self, **kwargs):
-        self.gitmodules_status = None
+        """
+        Parameters
+        ----------
+        package_name : str
+            Name of the base package
+        src_dir : str
+            Source directory (default "src")
+        ext_module_dirs : str[]
+            List of source directories defining external modules
+        ext_module_hint : str 
+            Regex pattern to auto-detect external module directories
+        test_dir : str
+            Unit test directory (default "tests")
+        test_submodules : str[]
+            List of git submodules only used for testing
+        has_package_data : bool
+            Set False IF project has no package_data (default True)
+        skip_configure : bool
+            Set True to configure cmake externally (default False)
+        config : str
+            Default CMake build type (default "Release")
+        generator : str
+            Default CMake --G argument
+        platform : str
+            Default CMake --platform argument
+        toolset : str
+            Default CMake --toolset argument
+        parallel : int > 0
+            Default CMake --parallel argument
+        configure_args : str[]
+            List of other default option arguments for CMake configure 
+        build_args : str[]
+            List of other default option arguments for CMake build
+        install_args : str[]
+            List of other default option arguments for CMake install
+        """
 
         def opt_value(attr, default):
             return kwargs[attr] if attr in kwargs and kwargs[attr] else default
@@ -49,8 +162,6 @@ class CMakeBuilder:
         # project configurations
         self.package_name = opt_value("package_name", "")
         self.src_dir = opt_value("src_dir", "src")
-        self.build_dir = opt_value("build_dir", "build")
-        self.dist_dir = opt_value("dist_dir", "dist")
         self.ext_module_dirs = opt_value("ext_module_dirs", None)
         self.ext_module_hint = opt_value("ext_module_hint", None)
         self.test_dir = opt_value("test_dir", "tests")
@@ -58,7 +169,7 @@ class CMakeBuilder:
         self.has_package_data = opt_value("has_package_data", True)
 
         # CMake configurations
-        self.skip_configure = opt_value("skip_configure", False) 
+        self.skip_configure = opt_value("skip_configure", False)
         self.config = opt_value("config", "Release")
         self.generator = opt_value("generator", None)
         self.platform = opt_value("platform", None)
@@ -67,6 +178,10 @@ class CMakeBuilder:
         self.configure_args = opt_value("configure_args", [])
         self.build_args = opt_value("build_args", [])
         self.install_args = opt_value("install_args", [])
+
+        self.gitmodules_status = None
+        self.build_dir = "build"
+        self.dist_dir = "dist"
 
         self._init_config = None
         self._built = False
@@ -78,11 +193,12 @@ class CMakeBuilder:
         self.revert()
 
     def get_package_dir(self):
+        """Returns package_dir argument for setuptools.setup()"""
         return {self.package_name: self._get_dist_dir(self.dist_dir)}
 
     def get_setup_data_files(self):
-        """Returns setup's data_files argument, listing all the aux files needed to install from sdist"""
-        data_files = CMakeBuilder.default_setup_data_files
+        """Returns data_files argument for setuptools.setup()"""
+        data_files = []
         if gitutil.has_submodules():
             data_files.append(".gitmodules")
             data_files.append(
@@ -243,8 +359,10 @@ class CMakeBuilder:
     def _get_dist_dir(self, prefix):
         return os.path.join(prefix if prefix else self.dist_dir, self.package_name)
 
-    def get_package_data(self, prefix=None):
-        """get setup package_data dict (expected to run only post-install)"""
+    def find_package_data(self, prefix=None):
+        """Returns package_data argument for setuptools.setup()
+
+        get setup package_data dict (expected to run only post-install)"""
 
         # glob all the files in dist_dir then filter out py & ext files
         root = _Path(self._get_dist_dir(prefix))
@@ -281,8 +399,8 @@ class CMakeBuilder:
         self._installed = dict(PY=False, EXT=False)
 
     def find_packages(self):
-        """Return a list all Python packages found within self.src_dir directory
-
+        """Returns packages argument for setuptools.setup()
+        
         package directories must meet the following conditions:
 
         * Must reside inside self.src_dir directory, counting itself        
@@ -310,7 +428,8 @@ class CMakeBuilder:
         return [_dir_to_pkg(self.package_name, dir) for dir in pkg_dirs]
 
     def find_ext_modules(self):
-        """Return the ext_modules argument for setuptools.setup() filled with
+        """Returns ext_modules argument for setuptools.setup()
+    Return the ext_modules argument for setuptools.setup() filled with
            all the CMake target directories within the src directory. The ext_modules
            are selected either explicitly vis self.ext_module_dirs or implicitly via
            self.ext_module_hint. 
