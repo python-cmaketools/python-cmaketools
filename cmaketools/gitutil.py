@@ -2,7 +2,6 @@ import re
 import configparser as cp
 import subprocess as sp
 import os
-import posixpath
 import pathlib
 
 gitmodules_status_name = ".gitmodules_status"
@@ -12,25 +11,24 @@ def has_submodules():
     return os.path.isfile(".gitmodules")
 
 
-def save_submodule_status(dst_dir="dist"):
+def get_submodule_status():
     """Save the current submodule status in a '.submodule_status' file in dst_dir"""
-    # if project does not use any submodule, nothing to do
-    if not has_submodules():
-        return []
-
-    if not os.path.exists(dst_dir):
-        os.makedirs(dst_dir)
-
-    out = sp.run(("git", "submodule",), capture_output=True, text=True)
-    file = posixpath.join(dst_dir, gitmodules_status_name)
-    with open(file, "w") as f:
-        f.write(out.stdout)
-    return file
+    return (
+        sp.run(("git", "submodule",), capture_output=True, text=True).stdout
+        if has_submodules()
+        else ""
+    )
 
 
-def clone_submodules(status_dir="dist", excludes=[]):
+def clone_submodules(status="", excludes=[]):
     """Clone submodules if missing
 
+    Parameters
+    ----------
+    status : str
+        Output of "cmake submodule status" (default: "")
+    excludes : str[]
+        List of submodules to ignore (default: [])
     """
 
     # if project does not use any submodule, nothing to do
@@ -49,10 +47,7 @@ def clone_submodules(status_dir="dist", excludes=[]):
     ]
 
     # if .gitmodules_status is provided, get sha1 hash keys
-    status_path = os.path.join(status_dir, gitmodules_status_name)
-    if os.path.isfile(status_path):
-        with open(status_path, "r") as f:
-            status = f.read()
+    if status:
         for m in re.findall(r".([0-9a-f]{5,40})\s(.+)\s\(.*?\)", status):
             next(module for module in submodules if m[1] == module["dst"])["sha1"] = m[
                 0
