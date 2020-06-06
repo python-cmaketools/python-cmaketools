@@ -1,5 +1,6 @@
 import os
 import re
+from operator import itemgetter
 
 from . import cmakeutil
 from . import gitutil
@@ -18,8 +19,6 @@ class CMakeBuilder:
     ----------
     path : str
         (static) Path to cmake executable. Auto-initialized
-    package_name : str
-        Name of the base package
     src_dir : str
         Source directory (default "src")
     ext_module_dirs : str[]
@@ -44,11 +43,11 @@ class CMakeBuilder:
         Default CMake --toolset argument
     parallel : int > 0
         CMake --parallel argument
-    configure_args : str[]
+    configure_opts : str[]
         List of other option arguments for CMake configure 
-    build_args : str[]
+    build_opts : str[]
         List of other option arguments for CMake build
-    install_args : str[]
+    install_opts : str[]
         List of other option arguments for CMake install
 
     Static Methods
@@ -84,10 +83,10 @@ class CMakeBuilder:
         Save status of submodules to be included in the sdist
     save_cmake_config()
         Save current CMake configurations
-    configure(generator=None, config=None, parallel=None, 
-              configure_args=[], build_args=[], install_args=[]):
+    configure(build_dir, generator=None, config=None, parallel=None, 
+              configure_opts=[]):
         Configure CMake project
-    run(prefix=None, component=None, pkg_version=None):
+    run(prefix=None, component=None, pkg_version=None, build_opts=[], install_opts=[]):
         Run CMake build & install
     revert()
         Revert the builder configuration to the initial state
@@ -122,8 +121,6 @@ class CMakeBuilder:
         """
         Parameters
         ----------
-        package_name : str
-            Name of the base package
         src_dir : str
             Source directory (default "src")
         ext_module_dirs : str[]
@@ -148,11 +145,11 @@ class CMakeBuilder:
             Default CMake --toolset argument
         parallel : int > 0
             Default CMake --parallel argument
-        configure_args : str[]
+        configure_opts : str[]
             List of other default option arguments for CMake configure 
-        build_args : str[]
+        build_opts : str[]
             List of other default option arguments for CMake build
-        install_args : str[]
+        install_opts : str[]
             List of other default option arguments for CMake install
         """
 
@@ -160,7 +157,6 @@ class CMakeBuilder:
             return kwargs[attr] if attr in kwargs and kwargs[attr] else default
 
         # project configurations
-        self.package_name = opt_value("package_name", "")
         self.src_dir = opt_value("src_dir", "src")
         self.ext_module_dirs = opt_value("ext_module_dirs", None)
         self.ext_module_hint = opt_value("ext_module_hint", None)
@@ -170,17 +166,17 @@ class CMakeBuilder:
 
         # CMake configurations
         self.skip_configure = opt_value("skip_configure", False)
+        self.build_dir = opt_value("build_dir", "")
         self.config = opt_value("config", "Release")
         self.generator = opt_value("generator", None)
         self.platform = opt_value("platform", None)
         self.toolset = opt_value("toolset", None)
         self.parallel = opt_value("parallel", None)
-        self.configure_args = opt_value("configure_args", [])
-        self.build_args = opt_value("build_args", [])
-        self.install_args = opt_value("install_args", [])
+        self.configure_opts = opt_value("configure_opts", [])
+        self.build_opts = opt_value("build_opts", [])
+        self.install_opts = opt_value("install_opts", [])
 
         self.gitmodules_status = None
-        self.build_dir = "build"
         self.dist_dir = "dist"
 
         self._init_config = None
@@ -189,12 +185,9 @@ class CMakeBuilder:
 
     def clear(self):
         """Clear build directory"""
-        cmakeutil.clear(self.build_dir)
+        if self.build_dir:
+            cmakeutil.clear(self.build_dir)
         self.revert()
-
-    def get_package_dir(self):
-        """Returns package_dir argument for setuptools.setup()"""
-        return {self.package_name: self._get_dist_dir(self.dist_dir)}
 
     def get_setup_data_files(self):
         """Returns data_files argument for setuptools.setup()"""
@@ -208,6 +201,7 @@ class CMakeBuilder:
 
     def get_source_files(self):
         """Get all the source files"""
+
         return [
             path.as_posix()
             for path in _Path(self.src_dir).rglob("*")
@@ -219,7 +213,14 @@ class CMakeBuilder:
 
     def pin_gitmodules(self):
         """Save status of submodules to be included in the sdist"""
-        self.gitmodules_status = gitutil.save_submodule_status(self.dist_dir)
+        self.gitmodules_status = gitutil.get_submodule_status()
+
+    def save_gitmodules_status(self, dst_dir):
+        """Save previously pinned submodules status to a file"""
+
+        if self.gitmodules_status:
+            with open(os.path.join(dst_dir, gitutil.gitmodules_status_name), "w") as f:
+                f.write(self.gitmodules_status)
 
     def save_cmake_config(self):
         """Save current CMake configurations"""
@@ -228,19 +229,18 @@ class CMakeBuilder:
             config=self.config,
             generator=self.generator,
             parallel=self.parallel,
-            configure_args=self.configure_args,
-            build_args=self.build_args,
-            install_args=self.install_args,
+            configure_opts=self.configure_opts,
+            build_opts=self.build_opts,
+            install_opts=self.install_opts,
         )
 
     def configure(
         self,
-        generator,
+        build_dir,
+        generator_config=None,
         config=None,
         parallel=None,
-        configure_args=[],
-        build_args=[],
-        install_args=[],
+        configure_opts=[],
     ):
         """configure CMake project"""
 
@@ -253,23 +253,34 @@ class CMakeBuilder:
             self.save_cmake_config()
 
         # check in major changes, requiring removal of the cache file
-        if cmakeutil.generator_changed(generator, self.build_dir, self.path):
+        if cmakeutil.generator_changed(generator_config, build_dir, self.path):
             print("\n[cmake] switching generator. Deleting CMakeCache.txt")
             cmakeutil.delete_cache(self.build_dir)
 
-        # store the new config
+        # resolve the new generator config
         if config:
             self.config = config
-        if generator:
-            self.generator
-        if parallel:
-            self.parallel = parallel
-        if configure_args:
-            self.configure_args = configure_args
-        if build_args:
-            self.build_args = build_args
-        if install_args:
-            self.install_args = install_args
+        else:
+            config = self.config
+        if generator_config:
+            generator, toolset, platform = itemgetter(
+                "generator", "toolset", "platform"
+            )(generator_config)
+            if generator not in generator_config:
+                generator = self.generator
+            if not toolset:
+                toolset = self.toolset
+            if not platform:
+                platform = self.platform
+        else:
+            generator = self.generator
+            toolset = self.toolset
+            platform = self.platform
+
+        if not parallel:
+            parallel = self.parallel
+        if self.configure_opts:
+            configure_opts = [*self.configure_opts, *configure_opts]
 
         # Make sure git submodules are installed
         # - If not, clone individually
@@ -277,12 +288,13 @@ class CMakeBuilder:
         #   the package would not contain submodules (unless they are included in the
         #   source folder, which is a bad practice)
         gitutil.clone_submodules(
-            self.dist_dir, self.test_submodules if os.path.isdir(self.test_dir) else []
+            self.gitmodules_status,
+            self.test_submodules if os.path.isdir(self.test_dir) else [],
         )
 
         print("\n[cmake] configuring CMake project...\n")
-        args = configure_args
-        kwargs = dict(build_type=self.config, cmakePath=self.path,)
+        args = configure_opts
+        kwargs = dict(build_type=config, cmakePath=self.path,)
 
         def set_option(opt, val):
             args.append(opt)
@@ -293,40 +305,40 @@ class CMakeBuilder:
             if os.name == "nt" and val.startswith("Ninja"):
                 kwargs["need_msvc"] = True
 
-        g = self.generator
-        if type(g) is dict:
-            if "generator" in g and g["generator"]:
-                set_generator(g["generator"])
-            if "toolset" in g and g["toolset"]:
-                set_option("-T", g["toolset"])
-            if "platform" in g and g["platform"]:
-                set_option("-A", g["platform"])
-        else:
-            if g:
-                set_generator(g)
-            if self.toolset:
-                set_option("-T", self.toolset)
-            if self.platform:
-                set_option("-A", self.platform)
+        if generator:
+            set_generator(generator)
+        if toolset:
+            set_option("-T", toolset)
+        if platform:
+            set_option("-A", platform)
 
         # run cmake configure
-        cmakeutil.configure(".", self.build_dir, *args, **kwargs)
+        cmakeutil.configure(".", build_dir, *args, **kwargs)
 
-    def run(self, pkg_version, prefix=None, component=None):
+        # store the build directory for later use
+        self.build_dir = build_dir
+
+    def run(
+        self, prefix, pkg_version=None, component=None, build_opts=[], install_opts=[],
+    ):
+
+        if not (self.build_dir and self.config):
+            raise RuntimeError(
+                "Run configure() first. No build directory has been recorded."
+            )
 
         if not self._built:
-            print(f"[cmake] building CMake project -> {prefix}\n")
+            print(f"[cmake] building CMake project -> {self.build_dir}\n")
 
             # Make package version available as C++ Preprocessor Define
-            env = os.environ.copy()
-            if pkg_version:
-                env[
-                    "CXXFLAGS"
-                ] = f'{env.get("CXXFLAGS", "")} -DVERSION_INFO="{pkg_version}"'
+            env = cmakeutil.set_environ_cxxflags(self.build_dir,VERSION_INFO=pkg_version)
+            
+            if self.build_opts:
+                build_opts = [*self.build_opts, *build_opts]
 
             cmakeutil.build(
                 self.build_dir,
-                *self.build_args,
+                *build_opts,
                 build_type=self.config,
                 cmakePath=self.path,
                 env=env,
@@ -337,12 +349,14 @@ class CMakeBuilder:
             not (component and self._installed["PY"] and self._installed["EXT"])
         ):
             print(
-                f'\n[cmake] installing CMake project component: {component if component else "ALL"}...\n'
+                f'\n[cmake] installing CMake project component: {component if component else "ALL"} to {prefix}...\n'
             )
+            if self.install_opts:
+                install_opts = [*self.install_opts, *install_opts]
             cmakeutil.install(
                 self.build_dir,
-                self._get_dist_dir(prefix),
-                *self.install_args,
+                os.path.join(os.getcwd(), prefix),
+                *install_opts,
                 component=component,
                 build_type=self.config,
                 cmakePath=self.path,
@@ -356,16 +370,13 @@ class CMakeBuilder:
 
         print()  # Add an empty line for cleaner output
 
-    def _get_dist_dir(self, prefix):
-        return os.path.join(prefix if prefix else self.dist_dir, self.package_name)
-
-    def find_package_data(self, prefix=None):
+    def find_package_data(self, prefix):
         """Returns package_data argument for setuptools.setup()
 
         get setup package_data dict (expected to run only post-install)"""
 
         # glob all the files in dist_dir then filter out py & ext files
-        root = _Path(self._get_dist_dir(prefix))
+        root = _Path(prefix)
         excludes = [".py", sysconfig.get_config_var("EXT_SUFFIX")]
         files = [
             f
@@ -376,10 +387,11 @@ class CMakeBuilder:
         # find the parent package of each file and add to the package_data
         package_data = {}
         for f in files:
-            pkg_dir = next(d for d in f.parents if (d / "__init__.py").is_file())
-            pkg_name = _dir_to_pkg(
-                self.package_name, pkg_dir.relative_to(root).as_posix()
-            )
+            try:
+                pkg_dir = next(d for d in f.parents if (d / "__init__.py").is_file())
+            except:
+                continue
+            pkg_name = _dir_to_pkg(pkg_dir.relative_to(root).as_posix())
             pkg_path = f.relative_to(pkg_dir).as_posix()
             if pkg_name in package_data:
                 package_data[pkg_name].append(pkg_path)
@@ -416,16 +428,11 @@ class CMakeBuilder:
             [d.parent.relative_to(root) for d in root.rglob("**/__init__.py")]
         )
 
-        # add all namespace packages that houses regular packages
-        pkg_paths = set(reg_paths)
-        for dir in reg_paths:
-            pkg_paths |= set(dir.parents)
-
         # convert path to str
-        pkg_dirs = [path.as_posix() for path in pkg_paths]
+        pkg_dirs = [path.as_posix() for path in reg_paths]
 
         # convert dir to package notation
-        return [_dir_to_pkg(self.package_name, dir) for dir in pkg_dirs]
+        return [_dir_to_pkg(dir) for dir in pkg_dirs]
 
     def find_ext_modules(self):
         """Returns ext_modules argument for setuptools.setup()
@@ -448,7 +455,7 @@ class CMakeBuilder:
             
         """
         return (
-            _create_extensions(self.package_name, self.ext_module_dirs)
+            _create_extensions(self.ext_module_dirs)
             if self.ext_module_dirs
             else self._find_ext_modules_from_hint()
             if self.ext_module_hint
@@ -467,12 +474,12 @@ class CMakeBuilder:
             for file in root.rglob("**/CMakeLists.txt")
             if find_hint(file, self.ext_module_hint)
         ]
-        return _create_extensions(self.package_name, matched_dirs)
+        return _create_extensions(matched_dirs)
 
 
-def _create_extensions(root, dirs):
-    return [Extension(_dir_to_pkg(root, mod), []) for mod in dirs]
+def _create_extensions(dirs):
+    return [Extension(_dir_to_pkg(mod), []) for mod in dirs]
 
 
-def _dir_to_pkg(root_pkg, pkg_dir):
-    return root_pkg + ("" if pkg_dir == "." else "." + re.sub(r"/", ".", pkg_dir))
+def _dir_to_pkg(pkg_dir):
+    return "" if pkg_dir == "." else re.sub(r"/", ".", pkg_dir)
