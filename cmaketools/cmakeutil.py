@@ -1,5 +1,5 @@
 import sys
-import multiprocessing
+import multiprocessing as mp
 import re
 from os import environ, path, name, chdir, makedirs, getcwd, walk, remove
 from shutil import which, rmtree
@@ -123,7 +123,7 @@ def configure(
 
 
 def _getWorkerCount():
-    return max(multiprocessing.cpu_count() - 1, 1)
+    return max(mp.cpu_count() - 1, 1)
 
 
 def build(
@@ -272,6 +272,7 @@ def ctest(build_dir, ctestPath=findexe("ctest"), **kwargs):
 def _getvspath():
     """Use vswhere to obtain VisualStudio path (Windows only)"""
     import vswhere
+
     return vswhere.find_first(latest=True, products=["*"], prop="installationPath")
 
 
@@ -394,3 +395,29 @@ def generator_changed(generator, build_dir="build", cmakePath=findexe("cmake")):
         or generator["toolset"] != cfg["CMAKE_GENERATOR_TOOLSET"]
         or generator["platform"] != cfg["CMAKE_GENERATOR_PLATFORM"]
     )
+
+
+def set_environ_cxxflags(build_dir, **defs):
+    """Set CXXFLAGS/CL environmental variable for extra C++ macro definitions"""
+
+    generator = read_cache(build_dir, ["CMAKE_GENERATOR"])["CMAKE_GENERATOR"]
+    if not generator:
+        raise RuntimeError("{build_dir}{os.sep}CMakeCache.txt not found.")
+
+    envvar = "CL" if generator.startswith("Visual Studio") else "CXXFLAGS"
+    env = environ.copy()
+    env[envvar] = (
+        " ".join(
+            [
+                f"-D{key}={value}"
+                for key, value in [
+                    (key, f'{value}' if type(value) == str else value,)
+                    for key, value in defs.items()
+                ]
+            ]
+        )
+        + " "
+        + env.get(envvar, "")
+    )
+
+    return env
