@@ -34,7 +34,6 @@ def setup(**kwargs):
     cmake = CMakeBuilder(**cmake_args)
 
     # create
-    setup_args["package_dir"] = cmake.get_package_dir()
     setup_args["packages"] = cmake.find_packages()
     setup_args["ext_modules"] = cmake.find_ext_modules()
     setup_args["data_files"] = cmake.get_setup_data_files()
