@@ -1,5 +1,6 @@
 import os
 import re
+from pathlib import Path
 
 from setuptools.command.egg_info import (
     egg_info as _egg_info_orig,
@@ -28,20 +29,40 @@ class manifest_maker(_manifest_maker_orig):
         return
 
 
+def set_package_dir(dist, other_command):
+    """Update distribution package_dir if not set
+    
+    Returns True if updated and other command is present
+    """
+    ret = not dist.package_dir
+    if ret:
+        # set package "source" files to be the dist_dir where CMake installs PY component to
+        sdist = dist.get_command_obj("sdist")
+        sdist.ensure_finalized()
+        dist.package_dir = {"": sdist.dist_dir}
+
+        # make sure the directory exists for egg-info creation
+        Path(sdist.dist_dir).mkdir(parents=True, exist_ok=True)
+
+        # return True only if other command is used in the build
+        ret = bool(dist.get_command_obj(other_command, 0))
+    return ret
+
+
 class _egg_info(_egg_info_orig):
     def __init__(self, cmake, dist):
         print("egg_info (cmake)")
         _egg_info_orig.__init__(self, dist)
-        self.cmake = cmake
+        # self.cmake = cmake
 
     def finalize_options(self):
-        _egg_info_orig.finalize_options(self)
 
-        # use the same output directries in CMake
-        build_dir = self.get_finalized_command("build").build_base
-        dist_dir = self.get_finalized_command("sdist").dist_dir
-        self.cmake.dist_dir = dist_dir
-        self.cmake.build_dir = build_dir
+        # update the distribution's packge_dir
+        if set_package_dir(self.distribution, "build_py"):
+            self.reinitialize_command("build_py")
+
+        # finalize egg_info command options
+        _egg_info_orig.finalize_options(self)
 
     def find_sources(self):
         """Generate SOURCES.txt manifest file using custom manifest_maker"""
@@ -56,8 +77,18 @@ class _build_py(_build_py_orig):
     def __init__(self, cmake, dist):
         _build_py_orig.__init__(self, dist)
         self.cmake = cmake
+        self.dist_dir = None
 
     def finalize_options(self):
+        # python & data files are staged in distribution folder
+        self.set_undefined_options(
+            "sdist", ("dist_dir", "dist_dir"),
+        )
+
+        # update the distribution's packge_dir
+        if set_package_dir(self.distribution, "egg_info"):
+            self.reinitialize_command("egg_info")
+
         # build_py command depends on build_ext
         build_ext = self.distribution.get_command_obj("build_ext")
         build_ext.ensure_finalized()
@@ -66,9 +97,11 @@ class _build_py(_build_py_orig):
         _build_py_orig.finalize_options(self)
 
     def _run_cmake(self):
-        """run cmake to copy .py files and files to be included in package_data"""
+        """run cmake to stage the .py and data files"""
         self.cmake.run(
-            component="PY", pkg_version=self.distribution.get_version(),
+            prefix=self.dist_dir,
+            component="PY",
+            pkg_version=self.distribution.get_version(),
         )
 
     def run(self):
@@ -90,8 +123,9 @@ class _build_py(_build_py_orig):
             self._run_cmake()
 
             # get the package_data from cmake
-            package_data = self.cmake.find_package_data()
+            package_data = self.cmake.find_package_data(self.dist_dir)
             if package_data:
+
                 self.distribution.package_data = package_data
                 self.package_data = package_data
 
@@ -267,7 +301,9 @@ class _build_ext(_build_ext_orig):
         _build_ext_orig.__init__(self, dist)
 
     def initialize_options(self):
+        self.build_base = None
         self.build_lib = None
+        self.dist_dir = None
         self.inplace = None
         self.define = None
         self.cmake_path = None
@@ -305,14 +341,11 @@ class _build_ext(_build_ext_orig):
         self.cmake.revert()
 
     def finalize_options(self):
-        # self.set_undefined_options('build',
-        #                            ('build_lib', 'build_lib'),
-        #                            ('force', 'force'),
-        #                            ('parallel', 'parallel'),
-        #                            )
-
         self.set_undefined_options(
-            "build", ("build_lib", "build_lib"),
+            "build", ("build_lib", "build_lib"), ("build_base", "build_base")
+        )
+        self.set_undefined_options(
+            "sdist", ("dist_dir", "dist_dir"),
         )
 
         self.verbose = None
@@ -334,7 +367,7 @@ class _build_ext(_build_ext_orig):
                 )
             cmake_settings["parallel"] = val
 
-        cmake_settings["generator"] = dict(
+        cmake_settings["generator_config"] = dict(
             generator=self.generator, toolset=self.toolset, platform=self.platform
         )
 
@@ -351,14 +384,14 @@ class _build_ext(_build_ext_orig):
                 )
             cmake_settings["config"] = self.config
 
-        configure_args = []
+        configure_opts = []
         if self.define:
             for d in re.finditer(
                 r"([A-Za-z0-9_./\-+]+)(?:\:([A-Z]+))?=([^" + os.pathsep + r"]+)",
                 self.define,
             ):
                 val = f'"{d[3]}"' if re.search(r"\s", d[3]) else d[3]
-                configure_args.append(
+                configure_opts.append(
                     f"-D{d[1]}:{d[2]}={val}" if d[2] else f"-D{d[1]}={val}"
                 )
 
@@ -369,8 +402,8 @@ class _build_ext(_build_ext_orig):
         ):
             val = getattr(self, opt[0])
             if val:
-                configure_args.append(f"-{opt[1]}")
-                configure_args.append(val)
+                configure_opts.append(f"-{opt[1]}")
+                configure_opts.append(val)
 
         def set_args(args, opts):
             for attr in opts:
@@ -383,10 +416,8 @@ class _build_ext(_build_ext_orig):
             return args
 
         set_args(
-            configure_args,
+            configure_opts,
             (
-                "toolset",
-                "platform",
                 "Wno_dev",
                 "Wdev",
                 "Werror",
@@ -408,10 +439,12 @@ class _build_ext(_build_ext_orig):
                 "no_warn_unused_cli",
             ),
         )
-        cmake_settings["configure_args"] = configure_args
-        cmake_settings["build_args"] = set_args([], ("clean_first", "verbose",))
-        cmake_settings["install_args"] = set_args([], ("strip", "verbose",))
-        self.cmake.configure(**cmake_settings)
+        cmake_settings["configure_opts"] = configure_opts
+        self.build_opts = set_args([], ("clean_first", "verbose",))
+        self.install_opts = set_args([], ("strip", "verbose",))
+
+        self.cmake.configure(self.build_base, **cmake_settings)
+        self.cmake.save_gitmodules_status(self.dist_dir)
 
     def get_source_files(self):
         """List all the source files
@@ -424,10 +457,13 @@ class _build_ext(_build_ext_orig):
         print(
             f'running build_ext (cmake) -> {"<inplace>" if self.inplace else self.build_lib}\n'
         )
+
         self.cmake.run(
+            prefix=self.dist_dir if self.inplace else self.build_lib,
             component=None if self.inplace else "EXT",
-            prefix=None if self.inplace else self.build_lib,
             pkg_version=self.distribution.get_version(),
+            build_opts=self.build_opts,
+            install_opts=self.install_opts,
         )
 
 
