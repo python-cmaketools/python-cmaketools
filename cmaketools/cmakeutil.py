@@ -99,13 +99,11 @@ def configure(
     # build cmake arguments
     args = [
         cmakePath,
-        *args,
-        "-S",
         root_dir,
         "-B",
         build_dir,
-        "-D",
-        f"CMAKE_BUILD_TYPE:STRING={build_type}",
+        *args,
+        f"-DCMAKE_BUILD_TYPE:STRING={build_type}",
     ]
 
     # retrieve env if assigned
