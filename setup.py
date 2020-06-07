@@ -11,7 +11,7 @@ with open("README.md", encoding="utf-8") as f:
 
 setup(
     name="cmaketools",
-    version="0.1.2",
+    version="0.1.3",
     author="Takeshi (Kesh) Ikuma",
     author_email="tikuma@gmail.com",
     description="Seamless integration of Cmake build system to setuptools/distutils",

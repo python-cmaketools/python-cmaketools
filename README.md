@@ -1,39 +1,46 @@
-# python_cmaketools
+# Setuptools extensions for CMake: Seamless integration of Cmake build system to setuptools
 
-## Setuptools extensions for CMake: Seamless integration of Cmake build system to setuptools
+This Python package provides an extension to setuptools to integrate CMake into setuptools workflow. Specifically, CMake build tool is responsible to build/install full Python distribution package with binary extensions then setuptools follows up to package up the ready-to-go files for binary distribution (`bdist_wheel`/`bdist_egg`/etc) or the CMake source directory for source distribution (`sdist`).
 
-This repository provides a powerful boilerplate (GitHub Template) for Python packages with binary extension modules. Specifically, it includes a set of Python setup modules to create a `sdist` tarball from a [CMake](https://cmake.org/) project with minimal `setup.py` scripting.
+## Features
 
-### Features
-
-- **Source Distributable**: This boilerplate let you create a `pip`-installable source distribution via Setuptools' `sdist` command. This enables the use of `tox` or Continuous Integration servers to perform multi-environment testing.
+- **setup() Wrapper**: `cmaketools.setup()` wraps `setuptools.setup()` to provide one-stop `setup()` call for both CMake and setupstools.
+- **Source Distributable**: `cmaketools` let you create a `pip`-installable source distribution via Setuptools' `sdist` command. This enables the use of `tox` to perform multi-environment testing.
 - **Automatic Source Content Detection**: By taking advantage of the source directory structure imposed by CMake project, `setup.py`'s critical keywords: `package_dir`, `packages`, `package_data`, and `ext_modules`.
 - **Source File Protection**: Neither CMake nor Python setuptools modify the content of the source subdirectory under any command.
 - **Git Submodule Aware**: If a project contains git submodules, the submodules will be automatically cloned during `pip` installation and the pinned commit of each submodule will be checked out before build.
 - **Support for CMake Command-Line Options**: The most of [the CMake command line options](https://cmake.org/cmake/help/v3.17/manual/cmake.1.html) are made available as options to the `build_ext` command of `setuptools`. For example, `python setup.py build_ext -GNinja` will build the CMake project with Ninja build system.
-- **Integaration of Native Code Tests**: CMake ships with a test driver program, called [ctest](https://cmake.org/cmake/help/latest/manual/ctest.1.html). With it, this boilerplate enables simultaneous testing of both the native and Python codes of the package all in Python.
+- **Integaration of Native Code Tests**: CMake ships with a test driver program, called [ctest](https://cmake.org/cmake/help/latest/manual/ctest.1.html). It could be called directly from Python via `cmaketools.cmakeutil.ctest()`.
 
-### Source Directory Structure
+## Examples
+
+You can experiment `cmaketools` with different Python/native interfaces availeble from following GitHub templates:
+
+- [CPython: https://github.com/python-cmaketools/cpython-example](https://github.com/python-cmaketools/cpython-example)
+- [Pybind11: https://github.com/python-cmaketools/pybind-example](https://github.com/python-cmaketools/pybind-example)
+- [Boost-Python: https://github.com/python-cmaketools/boost-python-example](https://github.com/python-cmaketools/boost-python-example)
+
+## Source Directory Structure
 
 The structure of the source directory and placements of `CMakeLists.txt` are vital to minimize potential packaging complications. Here are some key tips in sturcturing the source directory:
 
-- **Source Directory** (`src`) is the base of the Python package structure as you expect from authoring pure Python packages. Treat the `src_dir` as the base package. It could be named arbitrarily so long as it is assigned to `src_dir` attribute of `CMakeBuilder`.
-- **Package Directory** Source directory and any directries therein must contain `__init__.py` to be regarded as Python package. The Python modules (both pure and binary) will not be recognized in Python.
-- **Pure Python Modules** Place all `.py` files where they belong within the package structure.
-- **Binary Module** To define a binary module, create a subdirectory under a package folder it belongs to. In the example, `src/example_module` is one such directory, and it defines `mypkg.example_module` binary module. Each binary module directory should contain `CMakeLists.txt` file which define the library target. For example, the `CMakeLists.txt` file in module directory shall call `pybind11_add_module` to include a `pybind11`-based module to the build project. While this is not a mandatory requirement, this structure is used to auto-detect `ext_modules` by `CMakeBuilder`.
+- **Source Directory** (`src`) corresponds to the root package (or `Lib\site-packages` in Python directory). It could be named arbitrarily so long as it is assigned to `src_dir` attribute of `CMakeBuilder`. 
+- **Package Directory** Source directory and its subdirectries with `__init__.py` file are included in `packages` `setup` argument.
+- **Pure Python Modules** Place all `.py` module files where they belong within the package structure.
+- **Binary Extension Module** To define a binary module, create a subdirectory under a package folder it belongs to. In the example, `src/mypkg/example_module` is one such directory, and it defines `mypkg.example_module` binary module. Each binary module directory should contain `CMakeLists.txt` file which defines the library target. For example, the `CMakeLists.txt` file in module directory shall call `pybind11_add_module` to include a `pybind11`-based module to the build project. This is a requirement for the auto-configuration of `ext_modules` `setup` argument.
 - **Additional Files** Any "owned" additional files needed to build the binary modules or to be used by the package shall be placed somewhere in the source directory as it is the directory packaged in `sdist` (other than setup files).
 - **3rd-Pary Files** Script CMake to install them to their final in-package location to keep your package platform agnostic. This can be done via [git submodules](https://git-scm.com/book/en/v2/Git-Tools-Submodules) or CMake [`file(DOWNLOAD <url> <file> ...)`](https://cmake.org/cmake/help/latest/command/file.html#download) command, then build it if necessary and install the files relative to `CMAKE_INSTALL_PREFIX`.
 
-### `CMakeLists.txt` Authoring Tips
+## `CMakeLists.txt` Authoring Tips
 
 First, to learn how to author CMake scripts, visit [Official CMake Tutorial](https://cmake.org/cmake/help/latest/guide/tutorial/index.html).
 
-The automation realized in this Python/CMake package boilerplate relies on CMake's ability to traverse directory hierarchies, i.e., to encapsulate the build process of each directory via its `CMakeLists.txt` script and traverse directries. Some script snippets are repetitive and reusable as described below.
+The CMake integration relies on CMake's ability to traverse directory hierarchies, i.e., to encapsulate the build process of each directory via its `CMakeLists.txt` script and traverse directries. Some script snippets are repetitive and reusable as described below.
 
 Here are general tips:
 
 - In general, `CMakeLists.txt` is expected in the source directory and its (sub)directories (possibly excluding resource/asset directories). Parent `CMakeLists.txt` must call `add_subdirectory()` for each of its subdirectories.
-- **Base Source Directory** shall define `SRC_DIR` variable by
+- **Base Source Directory** shall define a `SRC_DIR` variable by
 
   ```cmake
   set(SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR})
@@ -41,7 +48,7 @@ Here are general tips:
 
   so relative paths of subdirectories can be evaluated later.
 
-- **Python Package Directories** with pure Python modules must contain [`install(FILES <file>...)`](https://cmake.org/cmake/help/latest/command/install.html#files) command to copy all `.py` files:
+- **Package Directories** with pure Python modules must contain [`install(FILES <file>...)`](https://cmake.org/cmake/help/latest/command/install.html#files) command to copy all `.py` files to the install target folder (typically `dist/<package_name>`):
 
   ```cmake
   file(RELATIVE_PATH DST_DIR ${SRC_DIR} ${CMAKE_CURRENT_SOURCE_DIR})
@@ -49,14 +56,7 @@ Here are general tips:
   install(FILES ${PYFILES} DESTINATION ${DST_DIR} COMPONENT "PY")
   ```
 
-  The base package (i.e., source directory) takes a bit different form to copy Python files:
-
-  ```cmake
-  file(GLOB PYFILES LIST_DIRECTORIES false RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} "*.py")
-  install(FILES ${PYFILES} DESTINATION "." COMPONENT "PY")
-  ```
-
-  Note `COMPONENT "PY"` designation in `install`. This lets `setuptools`'s `build_py` to install only pure Python files (and `package_data` files).
+  Note `COMPONENT "PY"` designation in `install`. This lets `setuptools`'s `build_py` to run CMake to install these files (and `package_data` files).
 
 - **External Module Directories** runs [`add_library(<name> SHARED | MODULE ...)`](https://cmake.org/cmake/help/latest/command/add_library.html#normal-libraries) command either directly or indirectly. Here, it is imperative to set `name` of the library target to match its directory name. Then the target is copied to the final destination with [`install(TARGETS <target>...)`](https://cmake.org/cmake/help/latest/command/install.html#targets) command.
 
@@ -90,7 +90,7 @@ Here are general tips:
   install(FILES "data.txt" DESTINATION ${DST_DIR} COMPONENT "PY")
   ```
 
-- **3rd-party Package Data Files** is a bit trickier. The most intuitive way perhaps to call the `install` command from the source folder, which matches the folder where the 3rd-party file is placed in the package. For example, suppose this skeltal directory model:
+- **3rd-Party Package Data Files** are a bit trickier. The most intuitive way perhaps is to call the `install` command from the source folder, which matches the folder where the 3rd-party file is placed in the package. For example, suppose this skeltal directory model:
 
   ```bash
   # After 'cmake --install build'
@@ -102,15 +102,16 @@ Here are general tips:
   ├── dist/
   |   └── mypkg/
   |       └── lib/
-  |           └── libtool.dll # <=copied distro-ready file
+  |           └── libtool.dll # <=distro-ready file (the install destination)
   ├── lib/
-  |   └── 3rd-party-tool/ # lib source files in here
+  |   └── 3rd-party-tool/ # lib source files in here to be built
   └── src/
-      └── lib/
-          └── CMakeLists.txt # <=issues install command
+      └── mypkg/
+          └── lib/
+              └── CMakeLists.txt # <=issues install command in this file
   ```
 
-  The source files of a 3rd-party library is included to the project via git submodule in `lib/3rd-party-tool/` and when built its DLL (assuming Windows) file will be found at `build/lib/3rd-party-tool/libtool.dll`. We want this DLL file to be placed in `lib` folder of the Python package, which means CMake must install (copy) `libtool.dll` to `dist/mypkg/lib/libtool.dll`. The install command shall be issued by `src/lib/CMakeLists.txt` even if `src/lib/` would otherwise be empty.
+  The source files of a 3rd-party library is included to the project via git submodule in `lib/3rd-party-tool/` and when built let's assume its DLL (assuming Windows) file will be found at `build/lib/3rd-party-tool/libtool.dll`. We want this DLL file to be placed in `lib` folder of the Python package, which means CMake must install (copy) `libtool.dll` to `dist/mypkg/lib/libtool.dll`. The install command shall be issued by `src/mypkg/lib/CMakeLists.txt` even if `src/mypkg/lib/` would otherwise be empty.
 
   ```cmake
   # to install a package data file
@@ -120,23 +121,19 @@ Here are general tips:
   install(FILES ${DLL_PATH} DESTINATION ${DST_DIR} COMPONENT "PY")
   ```
 
+  Note: Typically you can construct CMake variable via libarary's CMake variables rather than hard-coding the `DLL_PATH` as done above.
+
 - **Project Root** `CMakeLists.txt` defines general configurations (such as finding dependent libraries and setting up tests) of the build project. There are a couple things could be configured here to improve the CMake/Setuptools co-operation.
 
-  - Set the CMake project name to be the Python package name:
-
-    ```cmake
-    project(mypkg)
-    ```
-
-  - Set default install path to be `dist/<package_name>` so CMake by default installs to the same `dist` directory location:
+  - Set default install path to be `dist` so CMake by default installs to the same `dist` directory location as setuptools:
 
     ```cmake
     if (CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
-        set (CMAKE_INSTALL_PREFIX "${CMAKE_SOURCE_DIR}/dist/${PROJECT_NAME}" CACHE PATH "default install path" FORCE )
+        set (CMAKE_INSTALL_PREFIX "${CMAKE_SOURCE_DIR}/dist" CACHE PATH "default install path" FORCE )
     endif()
     ```
 
-### Explanation of `setup.py`
+<!-- ## Explanation of `setup.py`
 
 ```python
 #! /usr/bin/env python3
@@ -162,7 +159,7 @@ cmake = CMakeBuilder(
     ext_module_hint=r"pybind11_add_module",  # define regex pattern to search in each CMakeLists.txt
     # has_package_data = False, # set False to allow sdist to skip running cmake (uncomment only if no package_data or manually setting it)
 
-    ### DEVLEOPMENT OPTIONS: below options should be commented out for deployment ###
+    ## DEVLEOPMENT OPTIONS: below options should be commented out for deployment ##
     # skip_configure=True, # skip CMake configuration stage and uses existing config
     # config="Debug",    # specify build type (configuration), default="Release"
     # generator="Ninja", # use build_ext generator option
@@ -204,7 +201,7 @@ Traditionally, `package_data` must be specified to indicate additional files to 
 
 The `cmdclass` argument must be set to use the custom setup commands, and `generate_cmdclass(cmake)` provides the new command classes which are pre-linked to `cmake`.
 
-### Create a new repo from this boilerplate
+## Create a new repo from this boilerplate
 
 1. Create a new remote repo via "Use this template" green button at the top of this page or follow [this link](https://github.com/hokiedsp/python_cpp_boilerplate/generate).
 2. Clone the newly created repo:
@@ -218,9 +215,9 @@ git clone https://github.com/<your_account>/<new_repo>
 ```bash
 git submodule add https://github.com/pybind/pybind11.git lib/pybind11
 git submodule add https://github.com/catchorg/Catch2.git lib/catch2
-```
+``` -->
 
-### `build_ext` Command Options
+## `build_ext` Command Options for `cmaketools`-based `setup.py`
 
 The `build_ext` command options are completely changed to accomodate CMake command-line options. Here is the output of `python setup.py --help build_ext`
 
