@@ -8,10 +8,61 @@ from . import gitutil
 
 
 def setup(**kwargs):
+    """Run setuptools.setup() after setting up its commands for CMake build
+
+    It accepts most of setuptools.setup() arguments with additional arguments
+    to configure CMake build. Also, it may overwrite user-provided setuptools
+    arguments in order to integrate CMake.
+
+    CMake Keyward Arguments
+    -----------------------
+    cmake_path : str
+        path to cmake command (default auto-detected)
+    src_dir : str
+        Source directory (default "src")
+    ext_module_dirs : str[]
+        List of source directories defining external modules
+    ext_module_hint : str 
+        Regex pattern to auto-detect external module directories
+    test_dir : str
+        Unit test directory (default "tests")
+    test_submodules : str[]
+        List of git submodules only used for testing
+    has_package_data : bool
+        Set False if project has no package_data (default True)
+    skip_configure : bool
+        Set True to configure cmake externally (default False)
+    config : str
+        Default CMake build type (default "Release")
+    generator : str
+        Default CMake --G argument
+    platform : str
+        Default CMake --platform argument
+    toolset : str
+        Default CMake --toolset argument
+    parallel : int > 0
+        Default CMake --parallel argument
+    configure_opts : str[]
+        List of other default option arguments for CMake configure 
+    build_opts : str[]
+        List of other default option arguments for CMake build
+    install_opts : str[]
+        List of other default option arguments for CMake install
+
+    Overriden setuptools arguments
+    ------------------------------
+    cmdclass (partial override, affecting egg_info, build_py, 
+              build_ext, sdist, and install_data commands)
+    data_files
+    ext_modules
+    package_dir
+    package_data
+    packages
+
+    """
 
     # supported keyword arguments to CMakeBuilder constructor
     cmake_keys = (
-        "package_name",
         "src_dir",
         "test_dir",
         "test_submodules",

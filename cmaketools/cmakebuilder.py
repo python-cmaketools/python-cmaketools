@@ -121,6 +121,8 @@ class CMakeBuilder:
         """
         Parameters
         ----------
+        cmake_path : str
+            path to cmake command (default auto-detected)
         src_dir : str
             Source directory (default "src")
         ext_module_dirs : str[]
@@ -155,6 +157,9 @@ class CMakeBuilder:
 
         def opt_value(attr, default):
             return kwargs[attr] if attr in kwargs and kwargs[attr] else default
+
+        if kwargs["cmake_path"]:
+            self.path = kwargs["cmake_path"]
 
         # project configurations
         self.src_dir = opt_value("src_dir", "src")
