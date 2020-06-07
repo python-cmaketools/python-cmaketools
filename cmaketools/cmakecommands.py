@@ -338,6 +338,9 @@ class _build_ext(_build_ext_orig):
         self.clean_first = None
         self.strip = None
 
+        self.package = None
+        self.extensions = None
+
         self.cmake.revert()
 
     def finalize_options(self):
@@ -349,6 +352,9 @@ class _build_ext(_build_ext_orig):
         )
 
         self.verbose = None
+        if self.package is None:
+            self.package = self.distribution.ext_package
+        self.extensions = self.distribution.ext_modules
 
         if self.cmake_path:
             # validate the path before assign
@@ -446,13 +452,6 @@ class _build_ext(_build_ext_orig):
         self.cmake.configure(self.build_base, **cmake_settings)
         self.cmake.save_gitmodules_status(self.dist_dir)
 
-    def get_source_files(self):
-        """List all the source files
-        
-        - All files in src folder
-        - All CMakeLists.txt from cmake_srcdir down to the root"""
-        return self.cmake.get_source_files()
-
     def run(self):
         print(
             f'running build_ext (cmake) -> {"<inplace>" if self.inplace else self.build_lib}\n'
@@ -465,6 +464,22 @@ class _build_ext(_build_ext_orig):
             build_opts=self.build_opts,
             install_opts=self.install_opts,
         )
+
+    def get_source_files(self):
+        """List all the source files
+        
+        - All files in src folder
+        - All CMakeLists.txt from cmake_srcdir down to the root"""
+        return self.cmake.get_source_files()
+
+    def get_ext_filename(self, fullname):
+        """Convert the name of an extension (eg. "foo.bar") into the name
+        of the file from which it will be loaded (eg. "foo/bar.so", or
+        "foo\bar.pyd").
+        """
+        from distutils.command.build_ext import build_ext as _du_build_ext
+
+        return _du_build_ext.get_ext_filename(self, fullname)
 
 
 class _sdist(_sdist_orig):
