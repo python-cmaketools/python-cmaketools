@@ -23,6 +23,9 @@ def setup(**kwargs):
         "generator",
         "toolset",
         "platform",
+        "configure_opts",
+        "build_opts",
+        "install_opts",
     )
 
     # split kwargs into CMakeBuilder arguments and setup arguments
