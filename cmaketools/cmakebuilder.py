@@ -158,7 +158,7 @@ class CMakeBuilder:
         def opt_value(attr, default):
             return kwargs[attr] if attr in kwargs and kwargs[attr] else default
 
-        if kwargs["cmake_path"]:
+        if "cmake_path" in kwargs:
             self.path = kwargs["cmake_path"]
 
         # project configurations
