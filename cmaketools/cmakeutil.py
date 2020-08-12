@@ -29,7 +29,7 @@ def run(*args, path=findexe("cmake"), **runargs):
     runargs = {
         "stdout": sp.PIPE,
         "stderr": False,
-        "text": True,
+        "universal_newlines": True,
         **runargs,
     }
     out = sp.run([path, *args], **runargs)
@@ -39,7 +39,7 @@ def run(*args, path=findexe("cmake"), **runargs):
 def validate(cmakePath=findexe("cmake")):
     """Raises FileNotFoundError if cmakePath does not specify a valid cmake executable"""
     min_version = "3.5.0"
-    out = sp.run([cmakePath, "--version"], capture_output=True, text=True)
+    out = sp.run([cmakePath, "--version"], capture_output=True, universal_newlines=True)
     if not out.check_returncode():
         FileNotFoundError(
             f"CMake file ({cmakePath}) failed to execute with --version argument."

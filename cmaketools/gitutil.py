@@ -14,7 +14,7 @@ def has_submodules():
 def get_submodule_status():
     """Save the current submodule status in a '.submodule_status' file in dst_dir"""
     return (
-        sp.run(("git", "submodule",), capture_output=True, text=True).stdout
+        sp.run(("git", "submodule",), capture_output=True, universal_newlines=True).stdout
         if has_submodules()
         else ""
     )
@@ -90,5 +90,5 @@ def checkout(directory, branch):
 
 def rev_parse(directory, *args):
     return sp.run(
-        ("git", "rev-parse",) + args, cwd=directory, text=True, capture_output=True
+        ("git", "rev-parse",) + args, cwd=directory, universal_newlines=True, capture_output=True
     ).stdout
