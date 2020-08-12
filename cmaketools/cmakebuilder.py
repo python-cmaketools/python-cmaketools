@@ -1,12 +1,12 @@
 import os
 import re
 from operator import itemgetter
-
-from . import cmakeutil
-from . import gitutil
 from setuptools import Extension
 from pathlib import Path as _Path, PurePath as _PurePath
 from distutils import sysconfig
+
+from . import cmakeutil
+from . import gitutil
 
 
 class CMakeBuilder:
