@@ -1,0 +1,8 @@
+[project]
+dependencies = ['vswhere; sys_platform == \"win32\"', 'ninja']
+# [build-system]
+# requires = ["setuptools", "wheel", "vswhere"]
+# build-backend = "setuptools.build_meta"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

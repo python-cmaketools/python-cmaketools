@@ -2,16 +2,13 @@
 
 from setuptools import setup
 
-
-# read the contents of your README file
-from os import path
-
 with open("README.md", encoding="utf-8") as f:
     long_description = f.read()
 
+
 setup(
     name="cmaketools",
-    version="0.1.5",
+    version="0.2.0",
     author="Takeshi (Kesh) Ikuma",
     author_email="tikuma@gmail.com",
     description="Seamless integration of Cmake build system to setuptools/distutils",

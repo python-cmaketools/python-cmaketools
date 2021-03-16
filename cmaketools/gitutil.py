@@ -2,7 +2,7 @@ import re
 import configparser as cp
 import subprocess as sp
 import os
-import pathlib
+import logging
 
 gitmodules_status_name = ".gitmodules_status"
 
@@ -20,22 +20,23 @@ def get_submodule_status():
     )
 
 
-def clone_submodules(status="", excludes=[]):
+def clone_submodules(status="", excludes=()):
     """Clone submodules if missing
 
     Parameters
     ----------
-    status : str
-        Output of "cmake submodule status" (default: "")
-    excludes : str[]
-        List of submodules to ignore (default: [])
+    status : str or None  (default: None)
+        Output of "git submodule status" to checkout specific submodule commit
+
+    excludes : sequence of str (default: tuple())
+        List of submodules to ignore 
     """
 
     # if project does not use any submodule, nothing to do
     if not has_submodules():
         return
 
-    print("[git] .gitmodules found. Cloning the submodules if necessary")
+    logging.info("[git] .gitmodules found. Cloning the submodules if necessary")
 
     # parse .submodule for submodule paths
     parser = cp.ConfigParser(delimiters="=")
@@ -43,7 +44,7 @@ def clone_submodules(status="", excludes=[]):
     submodules = [
         dict(src=module["url"], dst=module["path"], sha1=None)
         for (name, module) in parser.items()
-        if name is not "DEFAULT"
+        if name != "DEFAULT"
     ]
 
     # if .gitmodules_status is provided, get sha1 hash keys
@@ -62,15 +63,15 @@ def clone_submodules(status="", excludes=[]):
         if os.path.exists(os.path.join(module["dst"], ".git")):
             msg = f'[git] submodule {module["dst"]} is already present.'
         else:
-            print(f'[git] cloning {module["src"]} to {module["dst"]}...')
+            logging.info(f'[git] cloning {module["src"]} to {module["dst"]}...')
             clone(module["src"], module["dst"])
             msg = "[git] cloning complete."
 
         if module["sha1"] and module["sha1"] != get_sha1(module["dst"]):
-            print(msg + " Checking out the specified commit...")
+            logging.info(msg + " Checking out the specified commit...")
             checkout(module["dst"], module["sha1"])
         else:
-            print(msg)
+            logging.info(msg)
 
 
 def get_sha1(submodule):

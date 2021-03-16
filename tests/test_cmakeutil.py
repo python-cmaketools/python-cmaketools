@@ -1,8 +1,9 @@
 import pytest
-import cmakeutils
+from cmaketools import cmakeutil
 
-def test_hello():
-    hello.say_hello()
+def test_validate():
+    out = cmakeutil.run('--version')
+    # print(out)
 
 # findexe(cmd)
 # run(*args, path=findexe("cmake"), **runargs)
