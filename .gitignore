@@ -9,6 +9,7 @@ tests/bin
 __pycache__
 .eggs
 .tox
+.venv
 
 # VS Code
 .vscode
@@ -45,3 +46,7 @@ __pycache__
 *.exe
 *.out
 *.app
+
+
+tests/samples/hello-cpp/helloModule.py
+tests/samples/hello-cpp/hello/world.py

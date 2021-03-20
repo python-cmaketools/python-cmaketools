@@ -1,4 +1,4 @@
-from skbuild import setup
+from cmaketools import setup
 
 setup(
     name="hello-pure",

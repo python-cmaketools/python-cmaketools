@@ -18,9 +18,11 @@ def load(arch):
     dict or None : Vars if success or None if failed
     """
 
+    print("VCVARSALL>PY")
     # no cache for the given arch found
     msvc = vswhere.find_first(latest=True, products=["*"], prop="installationPath")
     if msvc:
+        print("MSVC")
         # run the batch file followed by set to retrieve the modified environmental variables
         vcvarsall = os.path.join(msvc, "VC", "Auxiliary", "Build", "vcvarsall.bat")
         oldpaths = set(os.environ["path"].split(os.pathsep))
@@ -46,7 +48,7 @@ def load(arch):
                 )
             else:
                 vars[key] = m[2]
-    
+
     return vars
 
 
@@ -60,9 +62,10 @@ def _read_json():
         json_data = {}
     return json_data
 
+
 def clear_cache():
     """Delete the cache data file if exists
-    """    
+    """
     try:
         os.remove(cache_file)
     except:
@@ -120,7 +123,7 @@ def save_to_cache(arch, vars, json_data=None):
     dict or None : Vars if success or None if failed
     """
 
-    print(f'saved {arch} to cache')
+    logger.info(f"saved {arch} to cache")
 
     if not json_data:
         json_data = _read_json()
@@ -176,16 +179,17 @@ def run(platform=None):
     -------
     bool : True if could not run vcvarsall.bat
     """
-
     if vars := get_vars(platform):
-
         # parse the env vars and update the env vars of the current process accordingly
         for key, val in vars.items():
             if key == "path":
-                ospaths = set(os.environ["path"].split(os.pathsep))
-                for newpath in val.split(os.pathsep):
-                    ospaths.add(newpath)
-                os.environ["path"] = os.pathsep.join(ospaths)
+                ospaths = os.environ["path"]
+                newpaths = [
+                    newpath
+                    for newpath in val.split(os.pathsep)
+                    if ospaths.find(newpath) < 0
+                ]
+                os.environ["path"] = os.pathsep.join(newpaths) + os.pathsep + ospaths
             else:
                 os.environ[key] = val
 

@@ -1,43 +1,33 @@
 import pytest
 from cmaketools import cmakeutil
+import os
+from os import path
+import logging
 
-def test_validate():
-    out = cmakeutil.run('--version')
-    # print(out)
+logging.basicConfig(level='DEBUG')
 
-# findexe(cmd)
-# run(*args, path=findexe("cmake"), **runargs)
-# validate(cmakePath=findexe("cmake"))
-# configured(buildDir)
-# clear(buildDir)
-# configure(
-#     root_dir,
-#     build_dir,
-#     *args,
-#     build_type="Release",
-#     cmakePath=findexe("cmake"),
-#     need_msvc=False,
-#     **kwargs,
-# )
-# build(
-#     build_dir,
-#     *args,
-#     build_type=None,
-#     parallel=None,
-#     cmakePath=findexe("cmake"),
-#     **kwargs,
-# ):
-# install(
-#     build_dir,
-#     install_dir,
-#     *args,
-#     build_type=None,
-#     cmakePath=findexe("cmake"),
-#     **kwargs,
-# ):
-# ctest(build_dir, ctestPath=findexe("ctest"), **kwargs):
-# read_cache(build_dir, vars=None):
-# delete_cache(build_dir):
-# get_generators(cmakePath=findexe("cmake"), as_list=False):
-# get_generator_names(cmakePath=findexe("cmake")):
-# generator_changed(generator, build_dir="build", cmakePath=findexe("cmake")):
+def test_get_cmakebin():
+    assert cmakeutil.find_cmake() is not None
+
+root = os.getcwd()
+
+hello_cpp = path.join("tests","samples","hello-cpp")
+
+def test_regexps():
+    with open(path.join(hello_cpp,'CMakeLists.txt'),'r') as f:
+        txt = cmakeutil._remove_comments_and_emptylines(f.read())
+        print(txt)
+        for subdir in cmakeutil._subdir_iter(txt):
+            print(subdir)
+
+@pytest.fixture(scope='function')
+def hello_cpp_cwd():
+    os.chdir(path.join(root, hello_cpp))
+    yield
+    os.chdir(root)
+    
+
+def test_traversal():
+    for dir_info in cmakeutil.traverse_cmakelists():
+        print((dir_info[0],dir_info[2]))
+
