@@ -1,3 +1,4 @@
+from distutils.errors import DistutilsExecError
 from setuptools.command.build_ext import build_ext as _build_ext_orig
 from setuptools.dist import DistutilsOptionError, DistutilsSetupError
 from distutils.fancy_getopt import FancyGetopt
@@ -369,7 +370,13 @@ class build_ext(_build_ext_orig):
 
     def run(self):
         self.ensure_cmake_started()
-        self.distribution.cmake.wait(self.have_started["install"])
+        failed_job = self.distribution.cmake.wait(self.have_started["install"])
+        if failed_job is not None:
+            job = next(
+                (key for key, val in self.have_started.items() if val == failed_job),
+                "internal",
+            )
+            raise DistutilsExecError(f"CMake {job} failed.")
 
     def get_source_files(self):
         """Override it to retun empty list as sdist takes care of this via MANIFEST processing"""

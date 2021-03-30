@@ -141,10 +141,10 @@ class CMakeBuilder:
         if force:
             self.clear()
 
-        self.last_command = runner.enqueue(arg)
+        self.last_job = runner.enqueue(arg)
         self.build_dir = build_dir
         self.config = config
-        return self.last_command
+        return self.last_job
 
     def build(
         self, targets=None, options=None, build_dir=None, config=None,
@@ -171,8 +171,8 @@ class CMakeBuilder:
         if options:
             arg += " " + cmakeutil.dict_to_arg(options)
 
-        self.last_command = runner.enqueue(arg)
-        return self.last_command
+        self.last_job = runner.enqueue(arg)
+        return self.last_job
 
     def install(
         self, prefix, component=None, options=None, config=None,
@@ -197,12 +197,13 @@ class CMakeBuilder:
         if options:
             arg += " " + cmakeutil.dict_to_arg(options)
 
-        self.last_command = runner.enqueue(arg)
-        return self.last_command
+        self.last_job = runner.enqueue(arg)
+        return self.last_job
 
-    def wait(self, job):
-        runner.wait(job)
-        self.last_command = runner.get_current_job()
+    def wait(self, job=None):
+        ret = runner.get_failed_job() if runner.wait(job) else None
+        self.last_job = runner.get_last_job()
+        return ret
 
 
     def clear(self):

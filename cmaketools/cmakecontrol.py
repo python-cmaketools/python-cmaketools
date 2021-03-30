@@ -63,7 +63,7 @@ def start(
         Reserved. Currently not used
 
     platform : {'Win32','x64','ARM','ARM64'} or None, default=None
-        (Windows only) Specify target platform if different from the host. Only relevant if 
+        (Windows only) Specify target platform if different from the host. Only relevant if
         using Ninja in Windows. Note thet cmake configure run must set the same platform value.
 
     toolset : str or None, default=None
@@ -192,16 +192,31 @@ def enqueue(arg_str):
     logging.debug(f"Enqueued Job #{id} to CMake Runner: {arg_str[:-1]}")
 
     _cmake_jobs_status_.append(None)
-    return id
+    return id - _CMAKE_FIRST_USER_JOB_
 
 
 def get_last_job():
-    return _cmake_jobs_completed_ - 1 if _cmake_jobs_completed_ > 0 else None
+    return (
+        _cmake_jobs_completed_ - _CMAKE_FIRST_USER_JOB_
+        if _cmake_jobs_completed_ > 0
+        else None
+    )
+
+
+def get_failed_job():
+    return next(
+        (
+            id - _CMAKE_FIRST_USER_JOB_
+            for id in range(_cmake_jobs_completed_)
+            if _cmake_jobs_status_[id] is not None and _cmake_jobs_status_[id] > 0
+        ),
+        None,
+    )
 
 
 def get_current_job():
     return (
-        _cmake_jobs_completed_
+        _cmake_jobs_completed_ - _CMAKE_FIRST_USER_JOB_
         if _cmake_jobs_completed_ < len(_cmake_jobs_status_)
         else None
     )
@@ -213,16 +228,22 @@ def is_idle():
 
 def get_number_of_jobs(type="all"):
     nall = len(_cmake_jobs_status_)
-    return dict(
-        all=nall,
-        completed=_cmake_jobs_completed_,
-        remaining=nall - _cmake_jobs_completed_,
-    )[type]
+    return max(
+        dict(
+            all=nall,
+            completed=_cmake_jobs_completed_,
+            remaining=nall - _cmake_jobs_completed_,
+        )[type]
+        - _CMAKE_FIRST_USER_JOB_,
+        0,
+    )
 
 
 def get_job_status(id=None):
     try:
-        return _cmake_jobs_status_[id if id is not None else -1]
+        return _cmake_jobs_status_[
+            id + _CMAKE_FIRST_USER_JOB_ if id is not None else -1
+        ]
     except:
         raise ValueError("Invalid job id")
 
@@ -255,8 +276,10 @@ def wait(id=None, timeout=None):
     # validate id
     if id is None:
         id = [len(_cmake_jobs_status_) - 1]  # last job
-    elif id < 0 and id >= len(_cmake_jobs_status_):
-        raise ValueError(f"Specified job id ({id}) is not valid.")
+    else:
+        id += _CMAKE_FIRST_USER_JOB_
+        if id < 0 and id >= len(_cmake_jobs_status_):
+            raise ValueError(f"Specified job id ({id}) is not valid.")
 
     # if already completed (or quit) return the status
     if not is_running() or id < _cmake_jobs_completed_:
