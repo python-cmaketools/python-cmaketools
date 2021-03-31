@@ -1,6 +1,6 @@
 from . import gitutil, cmakeutil
 
-import os, sys, logging, argparse, shutil
+import os, sys, logging, argparse, shutil, shlex
 import subprocess as sp
 
 _is_win_ = os.name == "nt"
@@ -121,7 +121,16 @@ if __name__ == "__main__":
         sys.stdout.write("0\n")
         sys.stdout.flush()
 
+        # fixed argument for cmake subprocess.run call
+        runargs = {
+            "stdout": sys.stderr,
+            # "stderr": sp.PIPE,
+            # "universal_newlines": True,
+            "env": os.environ,
+        }
+
         while True:
+
             line = sys.stdin.readline()
             if not line or line == "--quit\n":
                 break
@@ -131,15 +140,11 @@ if __name__ == "__main__":
             # run cmake with the given arguments
             logging.info(f"[cmake] {next_args}")
 
-            runargs = {
-                "stdout": sys.stderr,
-                # "stderr": sp.PIPE,
-                # "universal_newlines": True,
-                "env": os.environ,
-            }
+            next_args = shlex.split(next_args)
+            logging.info(f"next_args:{next_args}")
 
             # put arguments with spaces in double quotes
-            rc = sp.run(f"{cmd} {next_args}", **runargs).returncode
+            rc = sp.run((cmd, *next_args), **runargs).returncode
             logging.debug(f"CMake returned {rc}")
             sys.stdout.write(f"{rc}\n")
             sys.stdout.flush()

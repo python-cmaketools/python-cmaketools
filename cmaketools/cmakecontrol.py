@@ -98,7 +98,7 @@ def start(
         encoding="utf-8",
         universal_newlines=True,
         env=os.environ,
-        shell=True,
+        # shell=True,
     )
 
     # first 2 fixed jobs are parse args & initialize
@@ -290,10 +290,13 @@ def wait(id=None, timeout=None):
     for i in range(_cmake_jobs_completed_, id + 1):
         logging.debug(f"waiting for JOB#{i}")
         rc = _cmake_proc_.stdout.readline()
-        _cmake_jobs_completed_ += 1
-        ret = _cmake_jobs_status_[i] = int(rc.strip())
-        if ret:
-            break
+        if rc:
+            _cmake_jobs_completed_ += 1
+            ret = _cmake_jobs_status_[i] = int(rc.strip())
+            if ret:
+                break
+        else:
+            raise RuntimeError("CMake Runner terminated prematurely.")
 
     return ret
 
