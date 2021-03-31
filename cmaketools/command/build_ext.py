@@ -1,9 +1,10 @@
 from distutils.errors import DistutilsExecError
 from setuptools.command.build_ext import build_ext as _build_ext_orig
-from setuptools.dist import DistutilsOptionError, DistutilsSetupError
+from setuptools.dist import DistutilsOptionError
 from distutils.fancy_getopt import FancyGetopt
+import re
 
-import re, os
+from .. import cmakeutil
 
 
 class build_ext(_build_ext_orig):
@@ -162,7 +163,6 @@ class build_ext(_build_ext_orig):
 
     boolean_options = [
         "inplace",
-        "debug",
         "force",
         "Wno-dev",
         "Wdev",
@@ -213,10 +213,6 @@ class build_ext(_build_ext_orig):
         self.have_completed = {}
 
     def initialize_options(self):
-        print("build_ext:initialize_options")
-
-        # super().initialize_options()
-
         self.options_sorted = False
         self.have_started = {}
         self.have_completed = {}
@@ -265,6 +261,8 @@ class build_ext(_build_ext_orig):
 
         self.package = None
         self.extensions = None
+        self.ext_map = {}
+        self.build_lib = None
 
     def _sort_options(self):
         # only perform once
@@ -281,9 +279,10 @@ class build_ext(_build_ext_orig):
         )
 
         self.set_undefined_options(
-            "build_py",
-            ("build_lib", "dist_dir"),
+            "build_py", ("build_lib", "build_lib"),
         )
+
+        self.dist_dir = "." if self.inplace else self.build_lib
 
         if self.verbose:
             self.verbose = True
@@ -330,7 +329,10 @@ class build_ext(_build_ext_orig):
         if undefs and isinstance(undefs, str):
             undefs = undefs.split(_build_ext_orig.sep_by)
 
-        config = self.config or "Debug" if self.debug or self.inplace else "Release"
+        # set build config preference: develop.debug -> self.config -> "Release"
+
+        develop = self.get_finalized_command("develop", False)
+        config = "Debug" if develop and develop.debug else self.config or "Release"
 
         self.have_started["config"] = self.distribution.cmake.configure(
             self.build_dir,
@@ -364,11 +366,26 @@ class build_ext(_build_ext_orig):
     def finalize_options(self):
 
         # super().finalize_options()
+        if self.package is None:
+            self.package = self.distribution.ext_package
+        self.extensions = self.distribution.ext_modules or []
+        self.check_extensions_list(self.extensions)
+        for ext in self.extensions:
+            ext._full_name = self.get_ext_fullname(ext.name)
+        for ext in self.extensions:
+            fullname = ext._full_name
+            self.ext_map[fullname] = ext
+
+            self.ext_map[fullname.split(".")[-1]] = ext
+
+            ext._links_to_dynamic = False
+            ext._needs_stub = False
 
         # sort options (if not done so already)
         self._sort_options()
 
     def run(self):
+
         self.ensure_cmake_started()
         failed_job = self.distribution.cmake.wait(self.have_started["install"])
         if failed_job is not None:
@@ -381,3 +398,12 @@ class build_ext(_build_ext_orig):
     def get_source_files(self):
         """Override it to retun empty list as sdist takes care of this via MANIFEST processing"""
         return []
+
+    def develop_pre_run(self, uninstall):
+        if uninstall:
+            cmakeutil.uninstall()
+
+    def develop_post_run(self, uninstall):
+        self.ensure_finalized()
+        if not uninstall:
+            cmakeutil.log_install(self.build_dir)

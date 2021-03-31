@@ -34,7 +34,6 @@ class build_py(_build_py_orig):
 
         if self.use_cmake:
             self.ensure_cmake_started()
-            print("\nwaiting for build_py (cmake)\n")
             self.distribution.camke.wait(self.cmake_job)
         else:
             _build_py_orig.run(self)

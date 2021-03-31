@@ -104,8 +104,6 @@ if __name__ == "__main__":
         cmd = cmakeutil.find_cmake(cmake_path)
         assert cmd is not None
         logging.info(f"CMake found at {cmd}")
-        if " " in cmd:
-            cmd = f'"{cmd}"'
 
         # set up os.environ for MSVC if needed
         if _is_win_ and not (msvc_only_if_no_cl and shutil.which("cl")):
@@ -159,6 +157,4 @@ if __name__ == "__main__":
         logging.error(err)
         sys.stdout.write("-1\n")
         sys.stdout.flush()
-    # finally:
-    #     sys.stdout.close()
-    #     sys.stderr.close()
+        

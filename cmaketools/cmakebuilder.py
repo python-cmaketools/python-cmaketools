@@ -1,7 +1,4 @@
-import os, logging
-from operator import itemgetter
-from pathlib import Path as _Path, PurePath as _PurePath
-from distutils import sysconfig
+import logging
 
 from . import cmakeutil, cmakecontrol as runner
 

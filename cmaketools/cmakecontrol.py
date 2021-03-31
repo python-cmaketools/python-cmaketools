@@ -22,7 +22,6 @@ Input Arguments [sys.argv]
 import logging
 
 import os
-import sys
 
 # import signal
 import subprocess as sp
@@ -146,6 +145,7 @@ def stop(timeout=5.0):
             else:
                 # if all jobs were completed, do gentle termination
                 _cmake_proc_.stdin.close()
+                _cmake_proc_.stdout.close()
                 _cmake_proc_.terminate()
                 try:
                     _cmake_proc_.wait(timeout)

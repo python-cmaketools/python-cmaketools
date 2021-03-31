@@ -1,16 +1,10 @@
-from distutils.log import warn
-from platform import processor
 from cmaketools.cmakebuilder import CMakeBuilder
 from setuptools import Distribution as _Distribution, Extension
-from . import cmakeutil, gitutil
+from . import cmakeutil
 import os, logging, re, contextlib
-from distutils.fancy_getopt import FancyGetopt, translate_longopt
-from distutils.errors import DistutilsOptionError, DistutilsSetupError
+from distutils.errors import DistutilsOptionError
 
-from pathlib import Path
-import distutils.core
-
-from .command import sdist, build_py, build_ext
+from .command import CMake_Commands
 
 # list of main options relevant to cmaketools
 cmake_opts = (
@@ -18,11 +12,10 @@ cmake_opts = (
     "ext_modules",
     "ext_package",
     "src_dir",
+    "ext_module_targets",
     "ext_module_dirs",
     "ext_module_hint",
 )
-
-import distutils.core
 
 
 def dir_to_pkg(pkg_dir, root_pkg=None, root_pkg_dir=None):
@@ -57,13 +50,8 @@ class Distribution(_Distribution):
         # setup_requires
         _Distribution.__init__(self, attrs)
 
-        # register cmaketools commands
-        self.cmdclass = {
-            "sdist": sdist,
-            "build_py": build_py,
-            "build_ext": build_ext,
-            **self.cmdclass,  # let user defined commands to overload it
-        }
+        # register cmaketools commands: let user defined commands to override them if so desired
+        self.cmdclass = {**CMake_Commands, **self.cmdclass}
 
     def run_commands(self):
         """Before running setuptools.run_commands', process cmaketools
@@ -115,10 +103,11 @@ class Distribution(_Distribution):
             }
         )
 
-        yield
-
-        self.cmake.stop()
-        self.cmake = None
+        try:
+            yield
+        finally:
+            self.cmake.stop()
+            self.cmake = None
 
     def _use_src_dir(self):
         if not self.src_dir and os.path.isdir("src"):
@@ -172,5 +161,7 @@ class Distribution(_Distribution):
 
         if hint := self.ext_module_hint:
             # now add modules to ext_modules by each base packages
-            new_dirs = [dir for dir, txt in self.cmakelists.items() if re.search(hint, txt)]
+            new_dirs = [
+                dir for dir, txt in self.cmakelists.items() if re.search(hint, txt)
+            ]
             self._add_ext_modules_from_dirs(new_dirs, only_warn=True)

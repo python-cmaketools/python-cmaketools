@@ -20,7 +20,7 @@ def setup(**kwargs):
     # `data_files` - auto-appends .submodule and .submodule_status
 
     # must be in a CMake project directory
-    if not cmakeutil.is_cmake_build():
+    if not _cmakeutil.is_cmake_build():
         raise DistutilsSetupError(
             "This project is not a CMake project. Use setuptools to package. (Missing CMakeLists.txt)"
         )

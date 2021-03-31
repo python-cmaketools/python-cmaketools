@@ -1,11 +1,7 @@
 import multiprocessing as mp
-import re, logging, subprocess as sp
+import re, logging
 from os import environ, path, getcwd, walk, remove, name
-from shutil import rmtree, which
-from setuptools import Extension
-from pathlib import Path as _Path
-
-from . import cmakecontrol as runner
+from shutil import rmtree, which, copyfile
 
 _is_win_ = name == "nt"
 
@@ -233,19 +229,59 @@ def set_environ_cxxflags(build_dir, **defs):
     return env
 
 
-def _create_extensions(dirs):
-    return tuple((Extension(_dir_to_pkg(mod), []) for mod in dirs))
+install_manifest_filename = "install_manifest.txt"
 
 
-def _dir_to_pkg(pkg_dir, root_pkg=None):
-    """Convert relative directory to package name
+def log_install(build_dir, dst_dir="."):
+    """Save cmake install manifest as .install_manifest.txt
 
     Args:
-        pkg_dir (str): [description]
-        root_pkg (str, optional): [description]. Defaults to "".
+        build_dir (str): CMake build directory.
+        dst_dir (str, optional): To save the manifest file (.install_manifest.txt) to this directory. Defaults to ".".
 
-    Returns:
-        str: [description]
+    Returns
+    -------
+        bool : True if saved
     """
-    pkg = "" if pkg_dir == "." else re.sub(r"/", ".", pkg_dir)
-    return f"{root_pkg}.{pkg}" if root_pkg else pkg
+
+    srcfile = path.join(build_dir, install_manifest_filename)
+    dstfile = path.join(dst_dir, "." + install_manifest_filename)
+
+    # if the file already exists, append
+    if path.isfile(dstfile):
+        with open(srcfile, "rt") as f:
+            list = f.read()
+        with open(dstfile, "at") as f:
+            f.write("\n")
+            f.write(list)
+    else:
+        copyfile(srcfile, dstfile)
+
+
+def uninstall(manifest_path=None):
+    """Uninstall CMake installed files and the manifest file
+
+    Args:
+        manifest_path (str, optional): File path to the CMake install_manifest.txt. Default path is
+        "./.install_manifest.txt". This file gets deleted upon successful completion.
+    """
+
+    # default manifest file
+    if not manifest_path:
+        manifest_path = "." + install_manifest_filename
+
+    try:
+        with open(manifest_path, "rt") as f:
+            txt = f.read()
+    except OSError:
+        return  # nothing to do
+
+    try:
+        for file in set(txt.splitlines()):
+            remove(file)
+        remove(manifest_path)
+    except:
+        raise RuntimeError(
+            f"Failed to uninstall the CMake installed files listed in {manifest_path}. "
+            + f"Please manually delete the installed files as well as {manifest_path} if exists."
+        )
