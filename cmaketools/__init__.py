@@ -1,10 +1,26 @@
-from setuptools import setup as _setup
 from distutils.errors import DistutilsSetupError
-
-from . import build_meta, cmakeutil as _cmakeutil
+from setuptools import (
+    Command,
+    Extension,
+    Require,
+    find_packages,
+    find_namespace_packages,
+)
 from .dist import Distribution
 
-__all__ = ("setup", "build_meta")
+from setuptools import setup as _setup
+from . import cmakeutil as _cmakeutil
+
+# export identical variables as setuptools
+__all__ = [
+    "setup",
+    "Distribution",
+    "Command",
+    "Extension",
+    "Require",
+    "find_packages",
+    "find_namespace_packages",
+]
 
 
 def setup(**kwargs):
@@ -28,10 +44,7 @@ def setup(**kwargs):
     # run the setuptools.setup
     # with custom distribution class & cmake-infused commands (append custom commands if specified)
     _setup(
-        **{
-            "distclass": Distribution,
-            **kwargs,
-        }
+        **{"distclass": Distribution, **kwargs,}
     )
 
 
