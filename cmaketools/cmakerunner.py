@@ -139,7 +139,6 @@ if __name__ == "__main__":
             logging.info(f"[cmake] {next_args}")
 
             next_args = shlex.split(next_args)
-            logging.info(f"next_args:{next_args}")
 
             # put arguments with spaces in double quotes
             rc = sp.run((cmd, *next_args), **runargs).returncode

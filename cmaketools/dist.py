@@ -1,10 +1,10 @@
-from cmaketools.cmakebuilder import CMakeBuilder
 from setuptools import Distribution as _Distribution, Extension
-from . import cmakeutil
-import os, logging, re, contextlib
+import os, logging, re
 from distutils.errors import DistutilsOptionError
 
 from .command import CMake_Commands
+from . import cmakeutil
+from . import cmakeoptions
 
 # list of main options relevant to cmaketools
 cmake_opts = (
@@ -53,14 +53,18 @@ class Distribution(_Distribution):
         # register cmaketools commands: let user defined commands to override them if so desired
         self.cmdclass = {**CMake_Commands, **self.cmdclass}
 
+    def finalize_options(self):
+
+        # build CMakeLists.txt tree
+        self.cmakelists = cmakeutil.parse_cmakelists()
+
+        return super().finalize_options()
+
     def run_commands(self):
         """Before running setuptools.run_commands', process cmaketools
         main options to finalize `package_dir` and `ext_modules` dist
         attributes.
         """
-
-        # build CMakeLists.txt tree
-        self.cmakelists = {dir: txt for dir, txt, _ in cmakeutil.traverse_cmakelists()}
 
         # convert cmaketools convenience options to setuptools options
         if not self.package_dir:
@@ -75,39 +79,15 @@ class Distribution(_Distribution):
         self._add_ext_modules_from_dirs(self.ext_module_dirs)
         self._add_ext_modules_with_hint()
 
-        # All set. Run the commands
-        with self._cmake_running():
+        # All set. Run the commands (under cmake running context to stop it when done/fail)
+        (manage_cmake := self.get_command_obj("manage_cmake")).ensure_finalized()
+        with manage_cmake.cmake_running():
             return _Distribution.run_commands(self)
 
-    @contextlib.contextmanager
-    def _cmake_running(self):
-        """Create a context during which self.cmake is valid. This guarantees
-        the runner subprocess to be terminated when done.
-        """
-        # Instantiate cmake builder class
-        build_opts = self.get_option_dict("build")
-        ext_opts = self.get_option_dict("build_ext")
+    def cmakelists_filter(self, command, args=None):
 
-        self.cmake = CMakeBuilder(
-            **{
-                **(
-                    {"platform": build_opts["plat-name"]}
-                    if "plat-name" in build_opts
-                    else {}
-                ),
-                **{
-                    name: ext_opts[name][1]
-                    for name in ("cmake_path", "generator", "toolset", "platform")
-                    if (name in ext_opts)
-                },
-            }
-        )
+        return cmakeutil.cmakelists_filter(self.cmakelists,command, args)
 
-        try:
-            yield
-        finally:
-            self.cmake.stop()
-            self.cmake = None
 
     def _use_src_dir(self):
         if not self.src_dir and os.path.isdir("src"):
@@ -133,7 +113,8 @@ class Distribution(_Distribution):
 
         for dir in dirs:
             pkg = next(
-                (pkg for pkg in package_dirs.items() if dir.startswith(pkg[1])), None,
+                (pkg for pkg in package_dirs.items() if dir.startswith(pkg[1])),
+                None,
             )
             if pkg is None:
                 msg = f"Extension module dir '{dir}' does not belong to a root package directory."
@@ -157,11 +138,15 @@ class Distribution(_Distribution):
                 return
 
     def _add_ext_modules_with_hint(self):
-        """append ext_modules specified via ext_module_hint"""
+        """[legacy] append ext_modules specified via ext_module_hint"""
+
+        print("finalize_options", self.ext_module_hint)
 
         if hint := self.ext_module_hint:
+            print(hint)
             # now add modules to ext_modules by each base packages
             new_dirs = [
-                dir for dir, txt in self.cmakelists.items() if re.search(hint, txt)
+                dir
+                for dir, _ in cmakeutil.search_cmakelists(self.cmakelists.keys(), hint)
             ]
             self._add_ext_modules_from_dirs(new_dirs, only_warn=True)

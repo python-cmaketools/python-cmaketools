@@ -1,3 +1,5 @@
+# DRAFT VERSION - NOT USED YET
+
 import re, subprocess as sp
 from shutil import which
 from . import cmakerunner as runner

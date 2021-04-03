@@ -275,7 +275,7 @@ def wait(id=None, timeout=None):
 
     # validate id
     if id is None:
-        id = [len(_cmake_jobs_status_) - 1]  # last job
+        id = len(_cmake_jobs_status_) - 1  # last job
     else:
         id += _CMAKE_FIRST_USER_JOB_
         if id < 0 and id >= len(_cmake_jobs_status_):

@@ -1,4 +1,4 @@
-import cmaketools.cmakecontrol as runner
+import cmaketools.cmakecontroller as runner
 import os
 import time
 import logging
