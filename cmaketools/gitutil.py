@@ -37,7 +37,7 @@ def clone_submodules(status="", excludes=[]):
 
     print("[git] .gitmodules found. Cloning the submodules if necessary")
 
-    # parse .submodule for submodule paths
+    # parse .gitmodules for submodule paths
     parser = cp.ConfigParser(delimiters="=")
     parser.read(".gitmodules")
     submodules = [
