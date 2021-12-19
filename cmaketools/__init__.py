@@ -11,6 +11,8 @@ from .dist import Distribution
 from setuptools import setup as _setup
 from . import cmakeutil as _cmakeutil
 
+__version__ = "0.2.0"
+
 # export identical variables as setuptools
 __all__ = [
     "setup",
